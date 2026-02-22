@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { authApi } from '@/api/auth';
+import { AUTH_EXPIRED_EVENT } from '@/api/client';
+import { disconnectSocket } from '@/hooks/useSocket';
 
 interface AuthContextValue {
   username: string | null;
@@ -18,6 +20,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isLoggedIn = username !== null;
 
+  const clearAuth = useCallback(() => {
+    setUsername(null);
+    localStorage.removeItem('username');
+    disconnectSocket();
+  }, []);
+
+  // Listen for 401 responses from the API client
+  useEffect(() => {
+    const handler = () => clearAuth();
+    window.addEventListener(AUTH_EXPIRED_EVENT, handler);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handler);
+  }, [clearAuth]);
+
   const login = async (u: string, p: string) => {
     await authApi.login(u, p);
     setUsername(u);
@@ -26,8 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await authApi.logout();
-    setUsername(null);
-    localStorage.removeItem('username');
+    clearAuth();
   };
 
   const register = async (u: string, p: string) => {

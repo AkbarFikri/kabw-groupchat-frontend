@@ -1,5 +1,7 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api';
 
+export const AUTH_EXPIRED_EVENT = 'auth:expired';
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     credentials: 'include',
@@ -9,6 +11,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     },
     ...options,
   });
+
+  if (res.status === 401) {
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    throw new Error('Unauthorized');
+  }
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: 'Request failed' }));
