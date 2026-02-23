@@ -4,7 +4,136 @@ import { groupsApi } from '@/api/groups';
 import { messagesApi } from '@/api/messages';
 import { useGroupSocket } from '@/hooks/useSocket';
 import type { Group, Message } from '@/types';
-import Button from '@/components/Button';
+
+// ─── Logout Confirm Modal ─────────────────────────────────────────────────────
+
+function LogoutModal({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(0,0,0,0.6)',
+        backdropFilter: 'blur(4px)',
+        animation: 'fadeIn 150ms ease',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 16,
+          padding: '28px 24px',
+          width: '100%',
+          maxWidth: 360,
+          margin: '0 16px',
+          animation: 'slideUp 200ms cubic-bezier(0.4,0,0.2,1)',
+          boxShadow: '0 24px 48px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* Icon */}
+        <div style={{
+          width: 48,
+          height: 48,
+          borderRadius: 14,
+          background: 'rgba(255,110,180,0.1)',
+          border: '1px solid rgba(255,110,180,0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 22,
+          marginBottom: 16,
+        }}>
+          ⏻
+        </div>
+
+        <h2 style={{
+          fontFamily: 'var(--font-display)',
+          fontWeight: 700,
+          fontSize: 20,
+          color: 'var(--text-primary)',
+          marginBottom: 8,
+          letterSpacing: '-0.3px',
+        }}>
+          Sign out?
+        </h2>
+        <p style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
+          color: 'var(--text-secondary)',
+          marginBottom: 24,
+          lineHeight: 1.6,
+        }}>
+          You'll need to sign in again to access your groups and messages.
+        </p>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1,
+              padding: '10px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              cursor: 'pointer',
+              transition: 'all var(--transition)',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = 'var(--border-bright)';
+              e.currentTarget.style.color = 'var(--text-primary)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = 'var(--border)';
+              e.currentTarget.style.color = 'var(--text-secondary)';
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1,
+              padding: '10px',
+              background: 'rgba(255,110,180,0.15)',
+              border: '1px solid rgba(255,110,180,0.3)',
+              borderRadius: 8,
+              color: 'var(--accent-pink)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all var(--transition)',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255,110,180,0.25)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,110,180,0.15)';
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Sidebar ────────────────────────────────────────────────────────────────
 
@@ -16,6 +145,8 @@ function Sidebar({
   onLeave,
   onLogout,
   username,
+  mobileOpen,
+  onMobileClose,
 }: {
   groups: Group[];
   activeGroupId: string | null;
@@ -24,10 +155,17 @@ function Sidebar({
   onLeave: (id: string) => void;
   onLogout: () => void;
   username: string;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
 }) {
   const [joinInput, setJoinInput] = useState('');
   const [joining, setJoining] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  // On mobile, sidebar is always "expanded" when open
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+  const isExpanded = isMobile ? true : sidebarOpen;
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,10 +180,15 @@ function Sidebar({
     }
   };
 
-  return (
+  const handleSelectGroup = (id: string) => {
+    onSelect(id);
+    onMobileClose();
+  };
+
+  const sidebarContent = (
     <aside style={{
-      width: sidebarOpen ? 260 : 64,
-      minWidth: sidebarOpen ? 260 : 64,
+      width: isExpanded ? 260 : 64,
+      minWidth: isExpanded ? 260 : 64,
       background: 'var(--bg-surface)',
       borderRight: '1px solid var(--border)',
       display: 'flex',
@@ -53,6 +196,7 @@ function Sidebar({
       transition: 'width 250ms ease, min-width 250ms ease',
       overflow: 'hidden',
       height: '100%',
+      flexShrink: 0,
     }}>
       {/* Header */}
       <div style={{
@@ -63,24 +207,28 @@ function Sidebar({
         gap: 10,
         flexShrink: 0,
       }}>
-        <div style={{
-          width: 32,
-          height: 32,
-          flexShrink: 0,
-          background: 'linear-gradient(135deg, var(--accent), var(--accent-pink))',
-          borderRadius: 8,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 16,
-          cursor: 'pointer',
-        }}
-          onClick={() => setSidebarOpen(v => !v)}
-          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            flexShrink: 0,
+            background: 'linear-gradient(135deg, var(--accent), var(--accent-pink))',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 16,
+            cursor: 'pointer',
+          }}
+          onClick={() => {
+            if (isMobile) onMobileClose();
+            else setSidebarOpen(v => !v);
+          }}
+          title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
         >
           ◈
         </div>
-        {sidebarOpen && (
+        {isExpanded && (
           <span style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 800,
@@ -94,7 +242,7 @@ function Sidebar({
         )}
       </div>
 
-      {sidebarOpen && (
+      {isExpanded && (
         <>
           {/* Join group form */}
           <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
@@ -177,7 +325,7 @@ function Sidebar({
                   key={g.id}
                   group={g}
                   active={g.id === activeGroupId}
-                  onSelect={() => onSelect(g.id)}
+                  onSelect={() => handleSelectGroup(g.id)}
                   onLeave={() => onLeave(g.id)}
                 />
               ))
@@ -188,7 +336,7 @@ function Sidebar({
 
       {/* User info at bottom */}
       <div style={{
-        padding: sidebarOpen ? '12px 14px' : '12px 14px',
+        padding: '12px 14px',
         borderTop: '1px solid var(--border)',
         display: 'flex',
         alignItems: 'center',
@@ -211,7 +359,7 @@ function Sidebar({
         }}>
           {username.charAt(0).toUpperCase()}
         </div>
-        {sidebarOpen && (
+        {isExpanded && (
           <>
             <span style={{
               flex: 1,
@@ -225,7 +373,7 @@ function Sidebar({
               {username}
             </span>
             <button
-              onClick={onLogout}
+              onClick={() => setShowLogoutModal(true)}
               title="Logout"
               style={{
                 background: 'none',
@@ -245,8 +393,17 @@ function Sidebar({
           </>
         )}
       </div>
+
+      {showLogoutModal && (
+        <LogoutModal
+          onConfirm={() => { setShowLogoutModal(false); onLogout(); }}
+          onCancel={() => setShowLogoutModal(false)}
+        />
+      )}
     </aside>
   );
+
+  return sidebarContent;
 }
 
 function GroupItem({
@@ -274,11 +431,7 @@ function GroupItem({
         padding: '8px 8px',
         borderRadius: 8,
         cursor: 'pointer',
-        background: active
-          ? 'var(--accent-glow)'
-          : hovered
-          ? 'var(--bg-hover)'
-          : 'transparent',
+        background: active ? 'var(--accent-glow)' : hovered ? 'var(--bg-hover)' : 'transparent',
         border: active ? '1px solid rgba(124,106,247,0.2)' : '1px solid transparent',
         transition: 'all var(--transition)',
         marginBottom: 2,
@@ -333,6 +486,68 @@ function GroupItem({
   );
 }
 
+// ─── Mobile Top Bar ───────────────────────────────────────────────────────────
+
+function MobileTopBar({
+  groupId,
+  onMenuOpen,
+}: {
+  groupId: string | null;
+  onMenuOpen: () => void;
+}) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      padding: '12px 16px',
+      borderBottom: '1px solid var(--border)',
+      background: 'var(--bg-surface)',
+      flexShrink: 0,
+    }}>
+      <button
+        onClick={onMenuOpen}
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'var(--text-secondary)',
+          fontSize: 20,
+          padding: 4,
+          lineHeight: 1,
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      >
+        ☰
+      </button>
+      <div style={{
+        width: 28,
+        height: 28,
+        background: 'linear-gradient(135deg, var(--accent), var(--accent-pink))',
+        borderRadius: 7,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 14,
+        flexShrink: 0,
+      }}>
+        ◈
+      </div>
+      <span style={{
+        fontFamily: 'var(--font-display)',
+        fontWeight: 800,
+        fontSize: 16,
+        color: 'var(--text-primary)',
+        flex: 1,
+        letterSpacing: '-0.3px',
+      }}>
+        {groupId ? `#${groupId}` : 'GroupChat'}
+      </span>
+    </div>
+  );
+}
+
 // ─── Chat area ───────────────────────────────────────────────────────────────
 
 function ChatArea({
@@ -349,13 +564,12 @@ function ChatArea({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
-  const topRef = useRef<HTMLDivElement>(null);
 
   const loadMessages = useCallback(async (cursor?: string) => {
     try {
       const data = await messagesApi.getMessages(groupId, cursor, 30);
       if (cursor) {
-        setMessages(prev => [...data.messages.reverse(), ...prev]);
+        setMessages(prev => [...data.messages.slice().reverse(), ...prev]);
       } else {
         setMessages(data.messages.slice().reverse());
         setNextCursor(data.nextCursor);
@@ -373,11 +587,9 @@ function ChatArea({
     loadMessages();
   }, [loadMessages]);
 
-  // Real-time via socket
   useGroupSocket(groupId, (msg) => {
     const newMsg = msg as Message;
     setMessages(prev => {
-      // avoid duplicates (if sender already got it via REST)
       if (prev.find(m => m.id === newMsg.id)) return prev;
       return [...prev, newMsg];
     });
@@ -428,8 +640,8 @@ function ChatArea({
       height: '100%',
       overflow: 'hidden',
     }}>
-      {/* Channel header */}
-      <div style={{
+      {/* Channel header - hidden on mobile (handled by MobileTopBar) */}
+      <div className="desktop-header" style={{
         padding: '14px 20px',
         borderBottom: '1px solid var(--border)',
         display: 'flex',
@@ -453,7 +665,7 @@ function ChatArea({
       <div style={{
         flex: 1,
         overflowY: 'auto',
-        padding: '16px 20px',
+        padding: '16px 16px',
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
@@ -516,7 +728,7 @@ function ChatArea({
 
       {/* Input */}
       <div style={{
-        padding: '12px 20px 16px',
+        padding: '10px 12px 12px',
         borderTop: '1px solid var(--border)',
         background: 'var(--bg-surface)',
         flexShrink: 0,
@@ -535,18 +747,18 @@ function ChatArea({
             {error}
           </div>
         )}
-        <form onSubmit={handleSend} style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+        <form onSubmit={handleSend} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <div style={{ flex: 1, position: 'relative' }}>
             <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Message #${groupId}… (Enter to send, Shift+Enter for newline)`}
+              placeholder={`Message #${groupId}…`}
               rows={1}
               disabled={sending}
               style={{
                 width: '100%',
-                padding: '10px 14px',
+                padding: '10px 48px 10px 14px',
                 background: 'var(--bg-base)',
                 border: '1px solid var(--border)',
                 borderRadius: 10,
@@ -572,7 +784,7 @@ function ChatArea({
               position: 'absolute',
               right: 10,
               bottom: 8,
-              fontSize: 11,
+              fontSize: 10,
               color: input.length > 220 ? 'var(--accent-pink)' : 'var(--text-muted)',
               fontFamily: 'var(--font-mono)',
               pointerEvents: 'none',
@@ -632,7 +844,6 @@ function MessageBubble({
         marginTop: isSameSender ? 2 : 12,
       }}
     >
-      {/* Avatar */}
       {!isSameSender ? (
         <div style={{
           width: 28,
@@ -656,8 +867,7 @@ function MessageBubble({
         <div style={{ width: 28, flexShrink: 0 }} />
       )}
 
-      <div style={{ maxWidth: '70%' }}>
-        {/* Sender name + time */}
+      <div style={{ maxWidth: '75%' }}>
         {!isSameSender && (
           <div style={{
             display: 'flex',
@@ -684,7 +894,6 @@ function MessageBubble({
           </div>
         )}
 
-        {/* Bubble */}
         <div style={{
           padding: '8px 12px',
           borderRadius: isSelf ? '12px 4px 12px 12px' : '4px 12px 12px 12px',
@@ -708,7 +917,7 @@ function MessageBubble({
 
 // ─── Empty state ─────────────────────────────────────────────────────────────
 
-function EmptyState() {
+function EmptyState({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   return (
     <div style={{
       flex: 1,
@@ -719,6 +928,7 @@ function EmptyState() {
       gap: 16,
       color: 'var(--text-muted)',
       fontFamily: 'var(--font-mono)',
+      padding: 24,
     }}>
       <div style={{
         width: 72,
@@ -735,12 +945,35 @@ function EmptyState() {
         ◈
       </div>
       <div style={{ textAlign: 'center' }}>
-        <p style={{ fontSize: 16, fontFamily: 'var(--font-display)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
+        <p style={{
+          fontSize: 16,
+          fontFamily: 'var(--font-display)',
+          fontWeight: 700,
+          color: 'var(--text-primary)',
+          marginBottom: 8,
+        }}>
           Select a group to start chatting
         </p>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
           Or join a group using the sidebar
         </p>
+        {/* Mobile shortcut */}
+        <button
+          onClick={onOpenSidebar}
+          className="mobile-only"
+          style={{
+            padding: '10px 20px',
+            background: 'var(--accent)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 13,
+            cursor: 'pointer',
+          }}
+        >
+          Open Groups →
+        </button>
       </div>
     </div>
   );
@@ -752,9 +985,19 @@ export default function ChatPage() {
   const { username, logout } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     groupsApi.getMyGroups().then(setGroups).catch(() => {});
+  }, []);
+
+  // Close mobile sidebar on resize to desktop
+  useEffect(() => {
+    const handler = () => {
+      if (window.innerWidth >= 640) setMobileSidebarOpen(false);
+    };
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
   }, []);
 
   const handleJoin = async (id: string) => {
@@ -779,43 +1022,123 @@ export default function ChatPage() {
   };
 
   const handleLogout = async () => {
-    try {
-      await logout();
-    } catch {
-      // ignore
-    }
+    try { await logout(); } catch { /* ignore */ }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      height: '100dvh',
-      background: 'var(--bg-base)',
-      overflow: 'hidden',
-    }}>
-      <Sidebar
-        groups={groups}
-        activeGroupId={activeGroupId}
-        onSelect={setActiveGroupId}
-        onJoin={handleJoin}
-        onLeave={handleLeave}
-        onLogout={handleLogout}
-        username={username ?? '?'}
-      />
+    <>
+      <style>{`
+        @media (max-width: 639px) {
+          .desktop-header { display: none !important; }
+          .desktop-sidebar { display: none !important; }
+          .mobile-topbar { display: flex !important; }
+        }
+        @media (min-width: 640px) {
+          .mobile-topbar { display: none !important; }
+          .mobile-sidebar-overlay { display: none !important; }
+          .mobile-only { display: none !important; }
+        }
 
-      {/* Main area */}
-      <main style={{
-        flex: 1,
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(16px) scale(0.97); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes slideInLeft {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0); }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      <div style={{
         display: 'flex',
+        height: '100dvh',
+        background: 'var(--bg-base)',
         overflow: 'hidden',
-        minWidth: 0,
+        flexDirection: 'column',
       }}>
-        {activeGroupId ? (
-          <ChatArea key={activeGroupId} groupId={activeGroupId} username={username ?? ''} />
-        ) : (
-          <EmptyState />
-        )}
-      </main>
-    </div>
+        {/* Mobile top bar */}
+        <div className="mobile-topbar" style={{ display: 'none' }}>
+          <MobileTopBar
+            groupId={activeGroupId}
+            onMenuOpen={() => setMobileSidebarOpen(true)}
+          />
+        </div>
+
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          {/* Desktop sidebar */}
+          <div className="desktop-sidebar">
+            <Sidebar
+              groups={groups}
+              activeGroupId={activeGroupId}
+              onSelect={setActiveGroupId}
+              onJoin={handleJoin}
+              onLeave={handleLeave}
+              onLogout={handleLogout}
+              username={username ?? '?'}
+              mobileOpen={false}
+              onMobileClose={() => {}}
+            />
+          </div>
+
+          {/* Mobile sidebar overlay */}
+          {mobileSidebarOpen && (
+            <div
+              className="mobile-sidebar-overlay"
+              onClick={() => setMobileSidebarOpen(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 200,
+                background: 'rgba(0,0,0,0.6)',
+                backdropFilter: 'blur(2px)',
+                animation: 'fadeIn 150ms ease',
+              }}
+            >
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{
+                  width: 280,
+                  height: '100%',
+                  animation: 'slideInLeft 220ms cubic-bezier(0.4,0,0.2,1)',
+                }}
+              >
+                <Sidebar
+                  groups={groups}
+                  activeGroupId={activeGroupId}
+                  onSelect={setActiveGroupId}
+                  onJoin={handleJoin}
+                  onLeave={handleLeave}
+                  onLogout={handleLogout}
+                  username={username ?? '?'}
+                  mobileOpen={mobileSidebarOpen}
+                  onMobileClose={() => setMobileSidebarOpen(false)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Main area */}
+          <main style={{
+            flex: 1,
+            display: 'flex',
+            overflow: 'hidden',
+            minWidth: 0,
+          }}>
+            {activeGroupId ? (
+              <ChatArea key={activeGroupId} groupId={activeGroupId} username={username ?? ''} />
+            ) : (
+              <EmptyState onOpenSidebar={() => setMobileSidebarOpen(true)} />
+            )}
+          </main>
+        </div>
+      </div>
+    </>
   );
 }
